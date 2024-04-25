@@ -1,0 +1,71 @@
+**** STREAMING REPLICATION WITH 1 PRIMARY AND 2 STANDBY:
+
+*** ON ALL THE SERVERS:AS ROOT USER: postgres-15
+
+1=> Install the repository RPM:
+--> sudo yum install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-7-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+
+2=> Install PostgreSQL:
+--> sudo yum install -y postgresql15-server
+
+3=> SWITCH USER AS POSTGRES USER AND edit the BASH_PROFILE and creeer .pgpass file on all the servers:
+--> vi  .bash_profile: 
+export PATH=/usr/pgsql-15/bin:$PATH
+export PGDATA=/var/lib/pgsql/15/data
+export PGDATABASE=bensoncorp
+export PGPORT=5432
+export PGUSER=app_user
+
+-->vi  .pgpass:   permission will be chmod 0600 .pgpass
+# HOST:PORT:DATABASE:USER:PASSWORD
+*:5432:*:app_user:postgres123
+*:5432:*:postgres:postgres123
+
+--------------------------------------------------------------------------------
+*** ONLY ON PRIMARY: 
+1=> initialyse the cluster
+--> sudo /usr/pgsql-15/bin/postgresql-15-setup initdb
+2=> edit postgresql.cong file with this changes:
+--> listen_addresses = *
+--> wal_keep_size = 100
+--> archive_command = 'test ! -f /pgarchive/benzcorp/%f && cp %p /pgarchive/benzcorp/%f'
+--> archive_mode = on
+--> #wal_level = replica
+--> make sure you create the archive directory. /pgarchive/benzcorp
+
+3=> edit the p_hba.conf by adding all the ip there allows servers to communicate
+
+4=> start as root postgres server: systemctl start postgresql-15.service
+
+5=> CONNECT: psql -p 5432 -U postgres -d postgres
+
+6=> create user app_user with superuser password 'postgres123';
+
+7=> create database bensoncorp owner app_user;
+
+8=> switch wall to generate wal file for recovery purpose:  select pg_switch_wal();
+
+-------------------------------------------------------------------------------------------------------
+
+*** ON ALL STANDBY:
+
+1=> take a pg_basebackup:
+
+--> pg_basebackup -h 10.108.0.2 -p 5432 -U app_user -X stream -c fast -D $PGDATA -R -P    
+
+2=> as root start your postgres server:
+-->  systemctl start postgresql-15.service
+
+3=> chack if your receiving wal:
+
+--> select * from pg_is_in_recovery();      --> it will true meaning is recovering from primary
+
+
+*** ON PRIMARY:
+1=> check:
+--> select * from pg_stat_replication;
+
+ 
+
+
+
